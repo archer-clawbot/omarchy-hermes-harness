@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.cody.hermes-harness",
+  "name": "Hermes Harness",
+  "version": "0.1.0",
+  "author": "Cody",
+  "license": "MIT",
+  "description": "Native Omarchy status and launch surface for a user-local Hermes installation.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Hermes Harness",
+    "description": "Hermes install, gateway, model, session, and federated-node status.",
+    "category": "AI",
+    "aliases": ["hermes", "agent-harness"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 15
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 10,
+        "max": 300,
+        "step": 5,
+        "defaultValue": 15
+      }
+    ]
+  }
+}

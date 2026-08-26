@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -u
+
+usage_file="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json"
+base='{}'
+if [[ -r "$usage_file" ]] && jq -e 'type == "object"' "$usage_file" >/dev/null 2>&1; then
+  base="$(<"$usage_file")"
+fi
+
+hermes_bin="$(command -v hermes 2>/dev/null || true)"
+installed=false
+version=""
+gateway_state="unknown"
+active_model=""
+
+if [[ -n "$hermes_bin" ]]; then
+  installed=true
+  while IFS= read -r line; do
+    version="$line"
+    break
+  done < <("$hermes_bin" --version 2>/dev/null)
+
+  if systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then
+    gateway_state="active"
+  elif systemctl --user is-enabled --quiet hermes-gateway.service 2>/dev/null; then
+    gateway_state="stopped"
+  else
+    gateway_state="not-installed"
+  fi
+fi
+
+config_file="${HERMES_HOME:-$HOME/.hermes}/config.yaml"
+if [[ -r "$config_file" ]]; then
+  active_model="$(awk -F': *' '$1 == "model" { value=$2; gsub(/"/, "", value); print value; exit }' "$config_file")"
+fi
+if [[ -z "$active_model" ]]; then
+  active_model="$(jq -r '.activeModel // ""' <<<"$base" 2>/dev/null)"
+fi
+
+node_bin="$(command -v hermes-node 2>/dev/null || true)"
+node_available=false
+nodes='{}'
+nodes_online=0
+nodes_total=0
+if [[ -n "$node_bin" ]]; then
+  node_available=true
+  node_output="$(timeout 18s "$node_bin" status 2>/dev/null || true)"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^([^:]+):[[:space:]]+(online|offline)$ ]] || continue
+    name="${BASH_REMATCH[1]}"
+    state="${BASH_REMATCH[2]}"
+    online=false
+    [[ "$state" == online ]] && online=true
+    nodes="$(jq -c --arg name "$name" --argjson online "$online" '. + {($name): {online: $online}}' <<<"$nodes")"
+    ((nodes_total += 1))
+    [[ "$online" == true ]] && ((nodes_online += 1))
+  done <<<"$node_output"
+fi
+
+if [[ "$nodes_total" -eq 0 ]]; then
+  nodes="$(jq -c '.nodes // {}' <<<"$base" 2>/dev/null || printf '{}')"
+  nodes_total="$(jq -r '.nodesTotal // (.nodes // {} | length) // 0' <<<"$base" 2>/dev/null || printf '0')"
+  nodes_online="$(jq -r '.nodesOnline // ([.nodes // {} | to_entries[] | select(.value.online == true)] | length) // 0' <<<"$base" 2>/dev/null || printf '0')"
+fi
+
+jq -cn \
+  --argjson base "$base" \
+  --argjson installed "$installed" \
+  --arg version "$version" \
+  --arg gateway "$gateway_state" \
+  --arg model "$active_model" \
+  --argjson nodeAvailable "$node_available" \
+  --argjson nodes "$nodes" \
+  --argjson nodesOnline "$nodes_online" \
+  --argjson nodesTotal "$nodes_total" \
+  '$base + {
+    installed: $installed,
+    version: $version,
+    gatewayState: $gateway,
+    activeModel: $model,
+    hermesNodeAvailable: $nodeAvailable,
+    nodes: $nodes,
+    nodesOnline: $nodesOnline,
+    nodesTotal: $nodesTotal
+  }'
