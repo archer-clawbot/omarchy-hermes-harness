@@ -18,22 +18,25 @@ The plugin is deliberately read-only. It does not install Hermes, alter gateway 
 - Hermes is optional; the panel reports when it is unavailable
 - `hermes-node` is optional; federation disappears gracefully when unavailable
 
-## Local development install
+## Install
+
+Install from the public repository and enable the widget:
+
+```bash
+omarchy plugin add https://github.com/archer-clawbot/omarchy-hermes-harness.git --enable
+```
+
+The widget defaults to the right bar section. Left-click opens the panel, middle-click refreshes, and right-click opens Hermes.
+
+## Local development
 
 The repository directory must match the manifest ID:
 
 ```text
-~/.config/omarchy/plugins/io.github.cody.hermes-harness
+~/.config/omarchy/plugins/io.github.archer-clawbot.hermes-harness
 ```
 
-Then rescan and enable it:
-
-```bash
-omarchy-shell shell rescanPlugins
-omarchy plugin enable io.github.cody.hermes-harness
-```
-
-The widget defaults to the right bar section. Left-click opens the panel, middle-click refreshes, and right-click opens Hermes.
+Saved changes hot-reload. Force discovery with `omarchy-shell shell rescanPlugins` when needed.
 
 ## Data sources
 
@@ -41,4 +44,8 @@ The widget defaults to the right bar section. Left-click opens the panel, middle
 
 ## Removal
 
-Disable/remove the widget through Omarchy, then remove this user-local repository. No system rollback is necessary.
+```bash
+omarchy plugin remove io.github.archer-clawbot.hermes-harness
+```
+
+No system rollback is necessary.

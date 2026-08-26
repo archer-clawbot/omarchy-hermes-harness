@@ -6,8 +6,8 @@ import qs.Ui
 
 Panel {
   id: root
-  moduleName: "io.github.cody.hermes-harness"
-  ipcTarget: "io.github.cody.hermes-harness"
+  moduleName: "io.github.archer-clawbot.hermes-harness"
+  ipcTarget: "io.github.archer-clawbot.hermes-harness"
   manageIpc: false
 
   property var anchorItem: null
@@ -62,7 +62,7 @@ Panel {
 
   Process {
     id: statusProc
-    command: ["bash", Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.cody.hermes-harness/scripts/hermes-status"]
+    command: ["bash", Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.archer-clawbot.hermes-harness/scripts/hermes-status"]
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.acceptStatus(text) }
     onExited: function(exitCode) { if (exitCode !== 0) root.lastError = "Status command exited " + exitCode }
   }

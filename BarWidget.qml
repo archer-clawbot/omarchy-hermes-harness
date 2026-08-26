@@ -4,7 +4,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "io.github.cody.hermes-harness"
+  moduleName: "io.github.archer-clawbot.hermes-harness"
 
   function injectPanel() {
     var target = panelLoader.item
