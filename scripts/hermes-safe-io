@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Descriptor-safe bounded reads and subprocess capture for Hermes Harness."""
+
+from __future__ import annotations
+
+import errno
+import os
+import selectors
+import signal
+import stat
+import subprocess
+import sys
+import time
+
+
+def fail(message: str, code: int = 1) -> "NoReturn":
+    print(message, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def positive_int(raw: str, label: str) -> int:
+    try:
+        value = int(raw, 10)
+    except ValueError:
+        fail(f"{label} must be an integer", 2)
+    if value <= 0:
+        fail(f"{label} must be positive", 2)
+    return value
+
+
+def write_all(data: bytes) -> None:
+    try:
+        sys.stdout.buffer.write(data)
+    except BrokenPipeError:
+        raise SystemExit(0)
+
+
+def read_regular(path: str, limit: int) -> None:
+    flags = os.O_RDONLY | os.O_NONBLOCK | os.O_CLOEXEC
+    if not hasattr(os, "O_NOFOLLOW"):
+        fail("O_NOFOLLOW is unavailable on this platform")
+    flags |= os.O_NOFOLLOW
+
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        fail(f"safe read refused {path}: {exc.strerror}")
+
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            fail(f"safe read refused non-regular file: {path}")
+        if info.st_size > limit:
+            fail(f"safe read refused oversized file: {path}")
+
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            try:
+                chunk = os.read(fd, min(65536, limit + 1 - total))
+            except OSError as exc:
+                if exc.errno == errno.EINTR:
+                    continue
+                raise
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > limit:
+                fail(f"safe read exceeded byte limit: {path}")
+        write_all(b"".join(chunks))
+    finally:
+        os.close(fd)
+
+
+def terminate_group(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def run_bounded(timeout_seconds: float, limit: int, command: list[str]) -> None:
+    if not command:
+        fail("run requires a command", 2)
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        fail(f"could not execute {command[0]}: {exc.strerror}")
+
+    assert process.stdout is not None
+    descriptor = process.stdout.fileno()
+    os.set_blocking(descriptor, False)
+    selector = selectors.DefaultSelector()
+    selector.register(descriptor, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout_seconds
+    chunks: list[bytes] = []
+    total = 0
+
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                terminate_group(process)
+                fail("subprocess timed out")
+
+            events = selector.select(remaining)
+            if not events:
+                terminate_group(process)
+                fail("subprocess timed out")
+
+            try:
+                chunk = os.read(descriptor, min(65536, limit + 1 - total))
+            except BlockingIOError:
+                continue
+            except OSError as exc:
+                if exc.errno == errno.EINTR:
+                    continue
+                raise
+
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > limit:
+                terminate_group(process)
+                fail("subprocess output exceeded byte limit")
+
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            return_code = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            terminate_group(process)
+            fail("subprocess timed out")
+        if return_code != 0:
+            fail(f"subprocess exited {return_code}", return_code if return_code < 126 else 1)
+        write_all(b"".join(chunks))
+    finally:
+        selector.close()
+        process.stdout.close()
+        terminate_group(process)
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        fail("usage: hermes-safe-io read <limit> <path> | run <seconds> <limit> -- <command...>", 2)
+
+    operation = sys.argv[1]
+    if operation == "read" and len(sys.argv) == 4:
+        read_regular(sys.argv[3], positive_int(sys.argv[2], "limit"))
+        return
+    if operation == "run" and len(sys.argv) >= 6 and sys.argv[4] == "--":
+        try:
+            timeout_seconds = float(sys.argv[2])
+        except ValueError:
+            fail("timeout must be numeric", 2)
+        if timeout_seconds <= 0:
+            fail("timeout must be positive", 2)
+        run_bounded(timeout_seconds, positive_int(sys.argv[3], "limit"), sys.argv[5:])
+        return
+    fail("usage: hermes-safe-io read <limit> <path> | run <seconds> <limit> -- <command...>", 2)
+
+
+if __name__ == "__main__":
+    main()

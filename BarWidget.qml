@@ -63,7 +63,7 @@ BarWidget {
     text: panelLoader.item ? panelLoader.item.barLabel : "H"
     active: panelLoader.item ? panelLoader.item.gatewayActive : false
     slotSize: Style.bar.statusSlot
-    tooltipText: panelLoader.item ? panelLoader.item.tooltipText : "Hermes Harness"
+    tooltipText: "Hermes Harness"
     onPressed: function(b) {
       if (b === Qt.RightButton) {
         if (root.bar) root.bar.run("hermes")

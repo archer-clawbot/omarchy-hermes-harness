@@ -11,7 +11,7 @@ The plugin provides visibility and launch actions. It is not an authorization bo
 The shipped code requires only ordinary user access:
 
 - read plugin files;
-- execute `bash`, `jq`, `timeout`, `systemctl`, `hermes`, and optionally `hermes-node` from `PATH`;
+- execute `bash`, Python 3, `jq`, `systemctl`, `hermes`, and optionally `hermes-node` from `PATH`;
 - read the user-local Hermes usage record and the `model` line from the Hermes configuration;
 - query the user service manager;
 - open Hermes through Omarchy's bar runner.
@@ -26,11 +26,15 @@ QML and the status script run with the user's authority. Install only from a rev
 
 ### Existing telemetry record
 
-The file `${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json` is user-owned input. The adapter accepts it only when `jq` confirms that it is a JSON object. Values are used for display, never for command construction or authorization.
+The file `${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json` is user-owned input. `hermes-safe-io` opens it with `O_NOFOLLOW`, `O_NONBLOCK`, and `O_CLOEXEC`, verifies the opened descriptor is a regular file, and rejects it above 256 KiB. The adapter then accepts it only when `jq` confirms that it is a JSON object. Values are used for display, never for command construction or authorization.
 
 ### Hermes configuration
 
-The adapter reads only the first top-level `model` value from `${HERMES_HOME:-$HOME/.hermes}/config.yaml`. It does not print or copy the full configuration and does not read `.env`, authentication files, OAuth state, API keys, or private keys.
+The adapter reads only the first top-level `model` value from `${HERMES_HOME:-$HOME/.hermes}/config.yaml`. The same descriptor-safe reader rejects non-regular files and files above 64 KiB. It does not print or copy the full configuration and does not read `.env`, authentication files, OAuth state, API keys, or private keys.
+
+### Subprocess output
+
+`hermes-safe-io run` drains stdout through a nonblocking pipe into a bounded byte buffer, discards stderr, applies a wall-clock timeout, and kills the subprocess group on timeout or overflow. Hermes version output is limited to 4 KiB over five seconds; node status is limited to 64 KiB over 18 seconds.
 
 ### Executables on PATH
 
@@ -44,7 +48,7 @@ If `hermes-node` exists, the adapter runs only its `status` subcommand. The wrap
 
 The adapter emits a JSON object to its parent QML process. It performs no network upload, analytics, logging, or persistence of its own.
 
-Displayed session titles and node aliases may be visible to anyone who can see the desktop. Users should avoid publishing screenshots that contain sensitive task names or infrastructure labels.
+Every dynamic QML `Text` sink explicitly uses `Text.PlainText`; the bar tooltip is static. Displayed session titles and node aliases may still be visible to anyone who can see the desktop. Users should avoid publishing screenshots that contain sensitive task names or infrastructure labels.
 
 ## Failure behavior
 

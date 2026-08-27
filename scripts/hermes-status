@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
 set -u
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+safe_io="$script_dir/hermes-safe-io"
 usage_file="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json"
 base='{}'
-if [[ -r "$usage_file" ]] && jq -e 'type == "object"' "$usage_file" >/dev/null 2>&1; then
-  base="$(<"$usage_file")"
+usage_candidate="$($safe_io read 262144 "$usage_file" 2>/dev/null || true)"
+if [[ -n "$usage_candidate" ]]; then
+  validated_base="$(jq -ce 'select(type == "object")' <<<"$usage_candidate" 2>/dev/null || true)"
+  if [[ -n "$validated_base" && ${#validated_base} -le 262144 ]]; then
+    base="$validated_base"
+  fi
 fi
 
 hermes_bin="$(command -v hermes 2>/dev/null || true)"
@@ -15,10 +21,9 @@ active_model=""
 
 if [[ -n "$hermes_bin" ]]; then
   installed=true
-  while IFS= read -r line; do
-    version="$line"
-    break
-  done < <("$hermes_bin" --version 2>/dev/null)
+  version_output="$($safe_io run 5 4096 -- "$hermes_bin" --version 2>/dev/null || true)"
+  IFS=$'\n' read -r version _ <<<"$version_output"
+  version="${version:0:512}"
 
   if systemctl --user is-active --quiet hermes-gateway.service 2>/dev/null; then
     gateway_state="active"
@@ -30,12 +35,14 @@ if [[ -n "$hermes_bin" ]]; then
 fi
 
 config_file="${HERMES_HOME:-$HOME/.hermes}/config.yaml"
-if [[ -r "$config_file" ]]; then
-  active_model="$(awk -F': *' '$1 == "model" { value=$2; gsub(/"/, "", value); print value; exit }' "$config_file")"
+config_content="$($safe_io read 65536 "$config_file" 2>/dev/null || true)"
+if [[ -n "$config_content" ]]; then
+  active_model="$(awk -F': *' '$1 == "model" { value=$2; gsub(/"/, "", value); print value; exit }' <<<"$config_content")"
 fi
 if [[ -z "$active_model" ]]; then
   active_model="$(jq -r '.activeModel // ""' <<<"$base" 2>/dev/null)"
 fi
+active_model="${active_model:0:256}"
 
 node_bin="$(command -v hermes-node 2>/dev/null || true)"
 node_available=false
@@ -44,9 +51,9 @@ nodes_online=0
 nodes_total=0
 if [[ -n "$node_bin" ]]; then
   node_available=true
-  node_output="$(timeout 18s "$node_bin" status 2>/dev/null || true)"
+  node_output="$($safe_io run 18 65536 -- "$node_bin" status 2>/dev/null || true)"
   while IFS= read -r line; do
-    [[ "$line" =~ ^([^:]+):[[:space:]]+(online|offline)$ ]] || continue
+    [[ "$line" =~ ^([A-Za-z0-9._-]{1,64}):[[:space:]]+(online|offline)$ ]] || continue
     name="${BASH_REMATCH[1]}"
     state="${BASH_REMATCH[2]}"
     online=false
@@ -82,4 +89,6 @@ jq -cn \
     nodes: $nodes,
     nodesOnline: $nodesOnline,
     nodesTotal: $nodesTotal
-  }'
+  }
+  | .currentSessionId = ((.currentSessionId // "") | tostring | .[0:256])
+  | .currentSessionTitle = ((.currentSessionTitle // "") | tostring | .[0:512])'

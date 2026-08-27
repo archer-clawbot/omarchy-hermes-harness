@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.archer-clawbot.hermes-harness",
   "name": "Hermes Harness",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Cody",
   "license": "MIT",
   "description": "Native Omarchy status and launch surface for a user-local Hermes installation.",

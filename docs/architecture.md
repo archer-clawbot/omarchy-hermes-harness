@@ -27,12 +27,15 @@ Omarchy Quattro shell
             └── native KeyboardPanel UI
 
 scripts/hermes-status
+├── scripts/hermes-safe-io
+│   ├── descriptor-safe bounded regular-file reads
+│   └── time- and byte-bounded subprocess capture
 ├── command -v hermes
 ├── hermes --version
 ├── systemctl --user (read-only queries)
 ├── ~/.hermes/config.yaml (model only)
 ├── ~/.local/state/omarchy/agents/usage/hermes.json
-└── hermes-node status (optional, bounded by timeout)
+└── hermes-node status (optional, bounded by timeout and output size)
 ```
 
 ## Quattro integration
@@ -86,7 +89,8 @@ io.github.archer-clawbot.hermes-harness/
 ├── BarWidget.qml
 ├── Panel.qml
 ├── scripts/
-│   └── hermes-status
+│   ├── hermes-status
+│   └── hermes-safe-io
 ├── docs/
 │   ├── architecture.md
 │   ├── security.md

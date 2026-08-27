@@ -18,7 +18,6 @@ Panel {
   readonly property bool gatewayActive: status.gatewayState === "active"
   readonly property int refreshSeconds: Math.max(10, parseInt(setting("refreshIntervalSec", 15), 10) || 15)
   readonly property string barLabel: status.installed ? (gatewayActive ? "⚕" : "⚕·") : "⚕×"
-  readonly property string tooltipText: !status.installed ? "Hermes not found" : "Hermes · gateway " + status.gatewayState
 
   function display(value, fallback) {
     var text = String(value === undefined || value === null ? "" : value)
@@ -102,6 +101,7 @@ Panel {
 
           Text {
             text: root.barLabel
+            textFormat: Text.PlainText
             color: root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.displayLarge
@@ -113,6 +113,7 @@ Panel {
             spacing: Style.spacing.labelGap
             Text {
               text: "Hermes Harness"
+              textFormat: Text.PlainText
               color: root.bar.foreground
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.title
@@ -121,6 +122,7 @@ Panel {
             Text {
               width: parent.width
               text: root.status.installed ? root.display(root.status.version, "Installed") : "NOT INSTALLED"
+              textFormat: Text.PlainText
               color: Qt.darker(root.bar.foreground, 1.4)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption
@@ -150,10 +152,10 @@ Panel {
               required property var modelData
               width: parent.width
               spacing: Style.space(8)
-              Text { text: root.status.nodes[modelData].online ? "●" : "○"; color: root.bar.foreground; font.pixelSize: Style.font.body }
-              Text { text: String(modelData); color: root.bar.foreground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.body }
+              Text { text: root.status.nodes[modelData].online ? "●" : "○"; textFormat: Text.PlainText; color: root.bar.foreground; font.pixelSize: Style.font.body }
+              Text { text: String(modelData); textFormat: Text.PlainText; color: root.bar.foreground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.body }
               Item { width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[1].implicitWidth - parent.children[3].implicitWidth - parent.spacing * 3); height: 1 }
-              Text { text: root.status.nodes[modelData].online ? "online" : "offline"; color: Qt.darker(root.bar.foreground, 1.4); font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall }
+              Text { text: root.status.nodes[modelData].online ? "online" : "offline"; textFormat: Text.PlainText; color: Qt.darker(root.bar.foreground, 1.4); font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall }
             }
           }
         }
@@ -161,6 +163,7 @@ Panel {
         Text {
           visible: root.lastError !== ""
           text: root.lastError
+          textFormat: Text.PlainText
           color: root.bar.urgent
           font.family: root.bar.fontFamily
           font.pixelSize: Style.font.bodySmall
@@ -186,8 +189,8 @@ Panel {
     property string value: ""
     width: parent.width
     spacing: Style.space(8)
-    Text { text: label; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall }
+    Text { text: label; textFormat: Text.PlainText; color: Qt.darker(root.bar.foreground, 1.35); font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall }
     Item { width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth - parent.spacing * 2); height: 1 }
-    Text { text: value; color: root.bar.foreground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall; elide: Text.ElideLeft; width: Math.min(implicitWidth, parent.width * 0.65) }
+    Text { text: value; textFormat: Text.PlainText; color: root.bar.foreground; font.family: root.bar.fontFamily; font.pixelSize: Style.font.bodySmall; elide: Text.ElideLeft; width: Math.min(implicitWidth, parent.width * 0.65) }
   }
 }

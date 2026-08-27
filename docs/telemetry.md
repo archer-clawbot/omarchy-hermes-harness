@@ -71,10 +71,10 @@ It removes double quotes from the value. If no model is found, it falls back to 
 
 ## Node collection
 
-When `hermes-node` exists, the adapter runs:
+When `hermes-node` exists, the adapter invokes it through the bounded I/O guard with:
 
 ```bash
-timeout 18s hermes-node status
+hermes-safe-io run 18 65536 -- hermes-node status
 ```
 
 It accepts lines matching:
@@ -86,7 +86,7 @@ It accepts lines matching:
 
 Other output is ignored. If at least one matching line is returned, that live set replaces the cached node map. If no lines match, the adapter falls back to cached `nodes`, `nodesOnline`, and `nodesTotal` values.
 
-The 18-second outer timeout bounds the aggregate status call. Any timeout internal to `hermes-node` remains the responsibility of that command.
+The 18-second outer timeout and 64 KiB output ceiling bound the aggregate status call before output reaches a shell variable. Node aliases must match `[A-Za-z0-9._-]{1,64}`. Any timeout internal to `hermes-node` remains the responsibility of that command.
 
 ## Freshness and interpretation
 

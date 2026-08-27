@@ -14,6 +14,7 @@ The plugin is deliberately read-only. It does not install Hermes, alter gateway 
 ## Requirements
 
 - Omarchy 4.x / current Quattro plugin runtime
+- Python 3
 - `jq`
 - Hermes is optional; the panel reports when it is unavailable
 - `hermes-node` is optional; federation disappears gracefully when unavailable
@@ -40,7 +41,7 @@ Saved changes hot-reload. Force discovery with `omarchy-shell shell rescanPlugin
 
 ## Data sources
 
-`scripts/hermes-status` reads the existing Omarchy Hermes usage record when available, then refreshes non-secret status from the installed `hermes`, the user gateway service, and `hermes-node`. It never writes Hermes state.
+`scripts/hermes-status` reads the existing Omarchy Hermes usage record when available, then refreshes non-secret status from the installed `hermes`, the user gateway service, and `hermes-node`. Its I/O guard permits only bounded, descriptor-pinned regular-file reads and caps subprocess output before materialization. It never writes Hermes state.
 
 ## Documentation
 

@@ -1,7 +1,7 @@
 ---
 name: omarchy-hermes-harness
 description: Operate, audit, troubleshoot, or maintain the Hermes Harness Quattro plugin for Omarchy. Use for the io.github.archer-clawbot.hermes-harness bar widget, its status adapter, Hermes display telemetry, or marketplace-plugin validation. Do not use this skill to install or modify privileged Hermes bridges, Polkit, sudoers, remote execution, distributed jobs, or package-managed Omarchy files.
-version: 0.1.0
+version: 0.1.1
 author: Cody
 license: MIT
 platforms: [linux]
@@ -82,6 +82,7 @@ PLUGIN_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.archer-c
 
 omarchy plugin validate "$PLUGIN_DIR"
 bash -n "$PLUGIN_DIR/scripts/hermes-status"
+python3 -m py_compile "$PLUGIN_DIR/scripts/hermes-safe-io"
 "$PLUGIN_DIR/scripts/hermes-status" | jq -e 'type == "object"'
 ```
 

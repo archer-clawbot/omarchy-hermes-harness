@@ -14,6 +14,7 @@ Then work from the cheapest check to the broadest:
 ```bash
 omarchy plugin validate "$PLUGIN_DIR"
 bash -n "$PLUGIN_DIR/scripts/hermes-status"
+python3 -m py_compile "$PLUGIN_DIR/scripts/hermes-safe-io"
 "$PLUGIN_DIR/scripts/hermes-status" | jq .
 omarchy-shell shell rescanPlugins
 omarchy-shell shell ping
@@ -152,7 +153,7 @@ bash -n "$PLUGIN_DIR/scripts/hermes-status"
 Confirm required local tools:
 
 ```bash
-command -v bash jq timeout systemctl
+command -v bash python3 jq systemctl
 ```
 
 ## Removal and recovery
