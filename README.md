@@ -42,6 +42,16 @@ Saved changes hot-reload. Force discovery with `omarchy-shell shell rescanPlugin
 
 `scripts/hermes-status` reads the existing Omarchy Hermes usage record when available, then refreshes non-secret status from the installed `hermes`, the user gateway service, and `hermes-node`. It never writes Hermes state.
 
+## Documentation
+
+- [Architecture](docs/architecture.md) — component boundaries and runtime flow
+- [Security](docs/security.md) — permissions, trust boundaries, and non-goals
+- [Telemetry](docs/telemetry.md) — status schema, sources, precedence, and freshness
+- [Troubleshooting](docs/troubleshooting.md) — validation and recovery procedures
+- [Agent skill](skill/SKILL.md) — bounded instructions for operating and maintaining this plugin
+
+These documents cover the marketplace plugin itself. They do not install or document a privileged broker, Polkit policy, desktop-control bridge, distributed-job system, or package-managed Omarchy modification.
+
 ## Removal
 
 ```bash
