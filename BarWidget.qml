@@ -20,6 +20,7 @@ BarWidget {
   }
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+  readonly property bool canLaunchLocally: panelLoader.item ? panelLoader.item.canLaunchLocally === true : false
   readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
 
   function open() {
@@ -66,7 +67,13 @@ BarWidget {
     tooltipText: "Hermes Harness"
     onPressed: function(b) {
       if (b === Qt.RightButton) {
-        if (root.bar) root.bar.run("hermes")
+        // In remote mode there is no local hermes to launch, so right-click
+        // opens the panel that explains where Hermes is running instead.
+        if (!root.canLaunchLocally) {
+          root.toggle()
+        } else if (root.bar) {
+          root.bar.run("hermes")
+        }
       } else if (b === Qt.MiddleButton) {
         root.refresh()
       } else {
