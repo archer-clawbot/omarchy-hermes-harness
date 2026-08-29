@@ -4,6 +4,17 @@ set -u
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 safe_io="$script_dir/hermes-safe-io"
 usage_file="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json"
+
+# Local freshness and size policy. These bounds belong to the reader, never to
+# the record: a publisher may ask for a shorter lifetime than policy allows but
+# never a longer one, and it may not date itself into the future to stay green.
+policy_max_stale_sec=900        # 15 minutes, the longest life a record may claim
+policy_default_stale_sec=300    # used when the record asks for nothing usable
+policy_max_skew_sec=120         # tolerated publisher clock skew
+policy_max_epoch=4102444800     # 2100-01-01T00:00:00Z, keeps arithmetic bounded
+policy_max_nodes=256            # node-map entries carried through
+policy_max_node_count=65536     # ceiling for published node counters
+
 base='{}'
 usage_candidate="$($safe_io read 262144 "$usage_file" 2>/dev/null || true)"
 if [[ -n "$usage_candidate" ]]; then
@@ -13,12 +24,38 @@ if [[ -n "$usage_candidate" ]]; then
   fi
 fi
 
+# Bound a record number before it reaches Bash arithmetic. Anything that is not
+# a finite JSON number becomes the local fallback; everything else is floored
+# and clamped, so no record value can arrive non-numeric, negative, or large
+# enough to overflow or to matter.
+record_int() {
+  local field="$1" fallback="$2" low="$3" high="$4" value
+  value="$(jq -r --arg field "$field" --argjson fallback "$fallback" \
+    --argjson low "$low" --argjson high "$high" \
+    '(.[$field] // null)
+     | if type == "number" and (isnan | not) and (isinfinite | not)
+       then (floor | if . < $low then $low elif . > $high then $high else . end)
+       else $fallback end' <<<"$base" 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] || value="$fallback"
+  printf '%s' "$value"
+}
+
+# Only an actual JSON boolean true counts. The string "true" is a different
+# value and must not unlock behaviour that suppresses local verification.
+record_bool() {
+  local field="$1" value
+  value="$(jq -r --arg field "$field" \
+    'if .[$field] == true then "true" else "false" end' <<<"$base" 2>/dev/null || true)"
+  [[ "$value" == "true" ]] || value=false
+  printf '%s' "$value"
+}
+
 # A record may declare itself remote, meaning Hermes runs on another host and a
 # publisher refreshes this file out of band. Local probes cannot see that
 # install, so in remote mode the record is authoritative for install, version
 # and gateway state rather than being overwritten with local misses.
 remote_mode=false
-if [[ "$(jq -r '.remote // false' <<<"$base" 2>/dev/null)" == "true" ]]; then
+if [[ "$(record_bool remote)" == "true" ]]; then
   remote_mode=true
 fi
 
@@ -27,21 +64,27 @@ version=""
 gateway_state="unknown"
 active_model=""
 remote_stale=false
+stale_after="$policy_default_stale_sec"
 
 if [[ "$remote_mode" == true ]]; then
-  # Trust the record, but never trust its freshness: a publisher that dies
+  # Trust the record's content, but never its freshness: a publisher that dies
   # leaves a plausible-looking file behind, and a stale green gateway is worse
-  # than an honest unknown.
-  collected_at="$(jq -r '(.collectedAtEpoch // 0) | if type == "number" then floor else 0 end' <<<"$base" 2>/dev/null || printf '0')"
-  stale_after="$(jq -r '(.staleAfterSec // 300) | if type == "number" then floor else 300 end' <<<"$base" 2>/dev/null || printf '300')"
-  [[ "$collected_at" =~ ^[0-9]+$ ]] || collected_at=0
-  [[ "$stale_after" =~ ^[0-9]+$ && "$stale_after" -gt 0 ]] || stale_after=300
+  # than an honest unknown. The record cannot extend its own lifetime past the
+  # local policy maximum, and it cannot buy time by dating itself forward.
+  collected_at="$(record_int collectedAtEpoch 0 0 "$policy_max_epoch")"
+  stale_after="$(record_int staleAfterSec "$policy_default_stale_sec" 1 "$policy_max_stale_sec")"
   now="$(printf '%(%s)T' -1)"
-  if [[ "$collected_at" -le 0 || $((now - collected_at)) -gt "$stale_after" ]]; then
+  [[ "$now" =~ ^[0-9]+$ ]] || now=0
+  age=$((now - collected_at))
+  if (( collected_at <= 0 )); then
+    remote_stale=true
+  elif (( age < -policy_max_skew_sec )); then
+    remote_stale=true
+  elif (( age >= stale_after )); then
     remote_stale=true
   fi
 
-  installed="$(jq -r 'if .installed == true then "true" else "false" end' <<<"$base" 2>/dev/null || printf 'false')"
+  installed="$(record_bool installed)"
   version="$(jq -r '(.version // "") | tostring' <<<"$base" 2>/dev/null || true)"
   version="${version:0:512}"
   active_model="$(jq -r '(.activeModel // "") | tostring' <<<"$base" 2>/dev/null || true)"
@@ -84,6 +127,23 @@ else
 fi
 active_model="${active_model:0:256}"
 
+# The published node map is untrusted input too. Keep only object entries under
+# an alias that matches the live parser, force a strict boolean online flag, and
+# cap how many entries can be carried through.
+published_nodes="$(jq -c --argjson maxNodes "$policy_max_nodes" \
+  '(.nodes // {})
+   | if type == "object" then . else {} end
+   | to_entries
+   | map(select((.key | test("^[A-Za-z0-9._-]{1,64}$")) and (.value | type == "object")))
+   | .[0:$maxNodes]
+   | map({key: .key, value: (.value + {online: (.value.online == true)})})
+   | from_entries' <<<"$base" 2>/dev/null || true)"
+[[ -n "$published_nodes" ]] || published_nodes='{}'
+published_total="$(jq -r 'length' <<<"$published_nodes" 2>/dev/null || printf '0')"
+[[ "$published_total" =~ ^[0-9]+$ ]] || published_total=0
+published_online="$(jq -r '[to_entries[] | select(.value.online == true)] | length' <<<"$published_nodes" 2>/dev/null || printf '0')"
+[[ "$published_online" =~ ^[0-9]+$ ]] || published_online=0
+
 node_available=false
 nodes='{}'
 nodes_online=0
@@ -105,13 +165,16 @@ if [[ "$remote_mode" != true ]]; then
     done <<<"$node_output"
   fi
 else
-  node_available="$(jq -r 'if .hermesNodeAvailable == true then "true" else "false" end' <<<"$base" 2>/dev/null || printf 'false')"
+  node_available="$(record_bool hermesNodeAvailable)"
 fi
 
 if [[ "$nodes_total" -eq 0 ]]; then
-  nodes="$(jq -c '.nodes // {}' <<<"$base" 2>/dev/null || printf '{}')"
-  nodes_total="$(jq -r '.nodesTotal // (.nodes // {} | length) // 0' <<<"$base" 2>/dev/null || printf '0')"
-  nodes_online="$(jq -r '.nodesOnline // ([.nodes // {} | to_entries[] | select(.value.online == true)] | length) // 0' <<<"$base" 2>/dev/null || printf '0')"
+  nodes="$published_nodes"
+  nodes_total="$(record_int nodesTotal "$published_total" 0 "$policy_max_node_count")"
+  nodes_online="$(record_int nodesOnline "$published_online" 0 "$policy_max_node_count")"
+  if (( nodes_online > nodes_total )); then
+    nodes_online="$nodes_total"
+  fi
 fi
 
 jq -cn \
@@ -126,6 +189,7 @@ jq -cn \
   --argjson nodesTotal "$nodes_total" \
   --argjson remote "$remote_mode" \
   --argjson remoteStale "$remote_stale" \
+  --argjson staleAfter "$stale_after" \
   '$base + {
     installed: $installed,
     version: $version,
@@ -138,5 +202,6 @@ jq -cn \
     remote: $remote,
     remoteStale: $remoteStale
   }
+  | (if $remote then .staleAfterSec = $staleAfter else . end)
   | .currentSessionId = ((.currentSessionId // "") | tostring | .[0:256])
   | .currentSessionTitle = ((.currentSessionTitle // "") | tostring | .[0:512])'
