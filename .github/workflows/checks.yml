@@ -1,0 +1,30 @@
+name: checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  adapter:
+    name: Adapter checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm required tools
+        run: command -v bash jq python3 awk
+
+      - name: Shell syntax
+        run: |
+          bash -n scripts/hermes-status
+          bash -n tests/run-tests.sh
+
+      - name: Python syntax
+        run: python3 -m py_compile scripts/hermes-safe-io
+
+      - name: Manifest is valid JSON
+        run: jq -e 'type == "object"' manifest.json > /dev/null
+
+      - name: Status adapter regression tests
+        run: bash tests/run-tests.sh
