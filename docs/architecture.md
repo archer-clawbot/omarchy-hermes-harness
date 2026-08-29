@@ -59,10 +59,10 @@ It also injects the active bar, settings, anchor item, and host widget into the 
 |---|---|
 | Left click | Toggle the Hermes panel |
 | Middle click | Refresh status immediately |
-| Right click | Launch `hermes` through the bar command runner |
+| Right click | Launch `hermes` through the bar command runner, or open the panel when Hermes is remote |
 | Escape | Close the panel |
 | Panel navigation keys | Move to adjacent Quattro panels |
-| Open Hermes button | Launch `hermes` and close the panel |
+| Open Hermes button | Launch `hermes` and close the panel; hidden when Hermes is remote |
 
 ## Refresh lifecycle
 
@@ -81,6 +81,8 @@ The adapter begins with the existing Hermes provider record, when readable and v
 
 Session title and ID come from the existing provider record because MVP 1 does not inspect Hermes session databases or invent a noninteractive session API.
 
+When the record carries the exact JSON boolean `remote: true`, that precedence is inverted: Hermes lives on another host, no local probe can observe it, and the record supplies install, version, gateway, node availability, and the node summary. Freshness is still decided locally, and an expired record reports `gatewayState: "stale"`. `docs/telemetry.md` holds the full contract.
+
 ## Repository layout
 
 ```text
@@ -98,6 +100,11 @@ io.github.archer-clawbot.hermes-harness/
 │   └── troubleshooting.md
 ├── skill/
 │   └── SKILL.md
+├── tests/
+│   └── run-tests.sh
+├── .github/
+│   └── workflows/
+│       └── checks.yml
 ├── README.md
 └── LICENSE
 ```
