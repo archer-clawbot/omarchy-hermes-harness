@@ -16,6 +16,8 @@ The shipped code requires only ordinary user access:
 - query the user service manager;
 - open Hermes through Omarchy's bar runner.
 
+In remote mode none of the execution steps run at all: the adapter resolves nothing on `PATH`, starts no subprocess other than its own `jq` and reader, and reads no Hermes configuration.
+
 It does not use `sudo`, `pkexec`, setuid programs, Polkit actions, root services, or package-manager hooks.
 
 ## Trust boundaries
@@ -27,6 +29,22 @@ QML and the status script run with the user's authority. Install only from a rev
 ### Existing telemetry record
 
 The file `${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json` is user-owned input. `hermes-safe-io` opens it with `O_NOFOLLOW`, `O_NONBLOCK`, and `O_CLOEXEC`, verifies the opened descriptor is a regular file, and rejects it above 256 KiB. The adapter then accepts it only when `jq` confirms that it is a JSON object. Values are used for display, never for command construction or authorization.
+
+### Remote telemetry records
+
+A record may declare `remote: true`, which tells the adapter that Hermes runs on another host and that local probes cannot confirm it. That is a privileged claim, because it suppresses local verification, so it is accepted only as the exact JSON boolean `true`. The string `"true"`, `1`, or any other truthy-looking value leaves the adapter in local mode.
+
+Everything else in a remote record is still untrusted display data:
+
+- `installed` and `hermesNodeAvailable` require an actual JSON boolean;
+- `gatewayState` is accepted only from a fixed four-value list and otherwise fails closed to `unknown`;
+- `version` and `activeModel` are coerced to strings and truncated;
+- `nodes` is re-validated key by key, and node counters are floored, clamped, and cross-checked against the validated map;
+- `collectedAtEpoch` and `staleAfterSec` are floored and clamped into locally defined ranges before any shell arithmetic sees them.
+
+Freshness is a local policy, not a record claim. The record cannot extend its own lifetime beyond the local maximum of 900 seconds, and a timestamp more than 120 seconds in the future is treated as stale rather than fresh. An expired record reports `gatewayState: "stale"` and never reports a green gateway, which is the failure mode this feature exists to prevent.
+
+A remote record confers no execution: it does not supply a command, host, URL, or launch target, and the panel withholds its local launch actions instead of running `hermes` for an install that is not there. Adding any record-controlled launch value would change the threat model and requires a separate review.
 
 ### Hermes configuration
 
@@ -55,6 +73,8 @@ Every dynamic QML `Text` sink explicitly uses `Text.PlainText`; the bar tooltip 
 - Missing Hermes: reports not installed.
 - Missing provider record: uses an empty base object.
 - Invalid provider JSON: ignores it.
+- Expired, undated, or forward-dated remote record: reports `gatewayState: "stale"` and `remoteStale: true` instead of a gateway state.
+- Malformed remote types: falls back to the local default for that field rather than failing the refresh.
 - Unavailable user bus: reports an unknown or non-active gateway state.
 - Missing `hermes-node`: reports it unavailable.
 - Node timeout or empty response: retains the last published node summary when one exists.
@@ -67,6 +87,8 @@ This is availability-oriented fail-soft behavior for display data. It must not b
 Do not add any of the following as a routine plugin change:
 
 - arbitrary shell command fields;
+- record-controlled launch commands, hosts, URLs, or arguments;
+- record-controlled freshness, timeout, or policy limits;
 - secret or credential display;
 - root operations;
 - passwordless sudo rules;

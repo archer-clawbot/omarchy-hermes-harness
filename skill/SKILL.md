@@ -54,11 +54,12 @@ Resolve environment-dependent paths at runtime. Never copy a contributor's home 
 3. Do not add `sudo`, `pkexec`, Polkit, setuid, or root-service calls.
 4. Do not read, print, copy, or commit `.env`, auth files, OAuth state, API keys, tokens, SSH private keys, or credential stores.
 5. Treat provider JSON, Hermes configuration, and command output as untrusted display data.
-6. Never construct commands from telemetry values.
-7. Limit node integration to `hermes-node status`; do not call `run` or `exec`.
-8. Preserve last known display data when a refresh fails.
-9. Verify the exact repository diff before committing or publishing.
-10. Do not claim the plugin proves service or node integrity; it is an operational summary.
+6. Never construct commands from telemetry values, and never add a record-controlled command, host, URL, or launch target.
+7. Keep freshness, timeout, and size limits as local policy constants; a record may narrow them, never widen them.
+8. Limit node integration to `hermes-node status`; do not call `run` or `exec`.
+9. Preserve last known display data when a refresh fails.
+10. Verify the exact repository diff before committing or publishing.
+11. Do not claim the plugin proves service or node integrity; it is an operational summary.
 
 ## Install
 
@@ -84,7 +85,10 @@ omarchy plugin validate "$PLUGIN_DIR"
 bash -n "$PLUGIN_DIR/scripts/hermes-status"
 python3 -m py_compile "$PLUGIN_DIR/scripts/hermes-safe-io"
 "$PLUGIN_DIR/scripts/hermes-status" | jq -e 'type == "object"'
+bash "$PLUGIN_DIR/tests/run-tests.sh"
 ```
+
+`tests/run-tests.sh` drives the adapter against fixture telemetry records in a sandboxed `HOME`, `XDG_STATE_HOME`, and `PATH`. It must pass before any change to the adapter is committed.
 
 When `qmllint` exists:
 
@@ -115,16 +119,19 @@ Prefer the adapter's bounded output over broad Hermes diagnostics:
 ```bash
 "$PLUGIN_DIR/scripts/hermes-status" |
   jq '{installed, version, gatewayState, activeModel, currentSessionId,
-       currentSessionTitle, hermesNodeAvailable, nodesOnline, nodesTotal, nodes}'
+       currentSessionTitle, hermesNodeAvailable, nodesOnline, nodesTotal, nodes,
+       remote, remoteStale}'
 ```
 
 Interpret results conservatively:
 
-- `installed=false`: `hermes` was not resolved on `PATH`;
-- `gatewayState=active`: the expected user unit was active at collection time;
+- `installed=false`: `hermes` was not resolved on `PATH`, or a remote record did not claim an install;
+- `gatewayState=active`: the expected user unit was active at collection time, or a fresh remote record said so;
 - missing session: the external provider record did not publish one;
 - node offline: the bounded `hermes-node status` probe did not report it online;
-- cached node data: possible when a live node query returns no parseable lines.
+- cached node data: possible when a live node query returns no parseable lines;
+- `remote=true`: the record declared Hermes to be on another host, and no local probe ran; local launch actions are withheld;
+- `remoteStale=true` with `gatewayState=stale`: the record is missing a timestamp, older than the local freshness policy allows, or dated into the future. That is a publisher problem, not evidence about the gateway. Fix the publisher; do not widen the policy in this plugin.
 
 ## Change workflow
 
@@ -137,7 +144,7 @@ Before editing:
 After editing:
 
 1. run `git diff --check`;
-2. validate manifest, script syntax, and JSON output;
+2. validate manifest, script syntax, and JSON output, and run `tests/run-tests.sh`;
 3. rescan plugins and test panel open/close;
 4. check new Quattro log output for plugin errors;
 5. update documentation when behavior, fields, dependencies, or trust boundaries change;

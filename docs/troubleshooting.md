@@ -16,6 +16,7 @@ omarchy plugin validate "$PLUGIN_DIR"
 bash -n "$PLUGIN_DIR/scripts/hermes-status"
 python3 -m py_compile "$PLUGIN_DIR/scripts/hermes-safe-io"
 "$PLUGIN_DIR/scripts/hermes-status" | jq .
+bash "$PLUGIN_DIR/tests/run-tests.sh"
 omarchy-shell shell rescanPlugins
 omarchy-shell shell ping
 omarchy plugin list --json | jq --arg id "$PLUGIN_ID" '.[] | select(.id == $id)'
@@ -91,6 +92,29 @@ hermes --version
 ```
 
 This plugin does not install or repair Hermes. Fix the user environment or Hermes installation separately, then refresh the widget.
+
+## Panel shows a remote Hermes
+
+Check what the record actually claims:
+
+```bash
+jq '{remote, collectedAtEpoch, staleAfterSec, installed, gatewayState}' \
+  "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json"
+```
+
+Remote mode requires the exact JSON boolean `true`. A string `"true"` leaves the plugin in local mode, which is intentional. In remote mode no local probe runs, so `command -v hermes` on this host is irrelevant, and the local launch actions are withheld because there is nothing local to launch.
+
+## Gateway state is stale
+
+`stale` means the remote record is outside the plugin's local freshness policy: the timestamp is missing, non-numeric, older than the record's effective lifetime, or more than 120 seconds in the future. It is not a statement about the gateway.
+
+```bash
+jq '{collectedAtEpoch, staleAfterSec}' \
+  "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage/hermes.json"
+date +%s
+```
+
+Fix the publisher that writes the record, or fix clock skew between the hosts. The record cannot ask for a lifetime beyond the local maximum of 900 seconds, and that maximum must not be widened to hide a dead publisher.
 
 ## Gateway state looks wrong
 

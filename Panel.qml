@@ -12,10 +12,16 @@ Panel {
 
   property var anchorItem: null
   property var hostWidget: null
-  property var status: ({ installed: false, version: "", gatewayState: "unknown", activeModel: "", currentSessionId: "", currentSessionTitle: "", nodesOnline: 0, nodesTotal: 0, nodes: {} })
+  property var status: ({ installed: false, version: "", gatewayState: "unknown", activeModel: "", currentSessionId: "", currentSessionTitle: "", hermesNodeAvailable: false, nodesOnline: 0, nodesTotal: 0, nodes: {}, remote: false, remoteStale: false })
   property string lastError: ""
   readonly property var barIdentity: hostWidget || root
   readonly property bool gatewayActive: status.gatewayState === "active"
+  // A remote record describes a Hermes on another host. There is no local
+  // executable to launch there, so the local launch actions are withheld
+  // rather than left to fail against a command that does not exist.
+  readonly property bool remote: status.remote === true
+  readonly property bool remoteStale: status.remoteStale === true
+  readonly property bool canLaunchLocally: !remote
   readonly property int refreshSeconds: Math.max(10, parseInt(setting("refreshIntervalSec", 15), 10) || 15)
   readonly property string barLabel: status.installed ? (gatewayActive ? "⚕" : "⚕·") : "⚕×"
 
@@ -136,6 +142,7 @@ Panel {
         Column {
           width: parent.width
           spacing: Style.space(8)
+          InfoPair { label: "Hermes host"; value: root.remote ? (root.remoteStale ? "remote (record expired)" : "remote (published record)") : "local" }
           InfoPair { label: "Gateway"; value: root.display(root.status.gatewayState, "unknown") }
           InfoPair { label: "Active model"; value: root.display(root.status.activeModel, "unknown") }
           InfoPair { label: "Session"; value: root.display(root.status.currentSessionTitle, root.display(root.status.currentSessionId, "none")) }
@@ -169,13 +176,26 @@ Panel {
           font.pixelSize: Style.font.bodySmall
         }
 
+        Text {
+          visible: root.remote
+          width: parent.width
+          text: "Hermes runs on another host. Local launch is unavailable in remote mode."
+          textFormat: Text.PlainText
+          color: Qt.darker(root.bar.foreground, 1.4)
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          wrapMode: Text.WordWrap
+        }
+
         Button {
+          visible: root.canLaunchLocally
           width: parent.width
           text: "Open Hermes"
           foreground: root.bar.foreground
           fontFamily: root.bar.fontFamily
           bordered: true
           onClicked: {
+            if (!root.canLaunchLocally) return
             if (root.bar) root.bar.run("hermes")
             root.close()
           }
